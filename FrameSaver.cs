@@ -11,6 +11,7 @@ namespace SwarmExtensions.FrameSaver;
 public class FrameSaver : Extension
 {
     public static T2IRegisteredParam<bool> SaveLastFrameParam, SaveFirstFrameParam;
+    public static T2IRegisteredParam<int> SaveFramesStartParam, SaveFramesEndParam;
 
     // OnInit is called when the extension is loaded
     public override void OnInit()
@@ -32,6 +33,22 @@ public class FrameSaver : Extension
                 Group: T2IParamTypes.GroupOtherFixes,
                 IgnoreIf: "false"
             ));
+            SaveFramesStartParam = T2IParamTypes.Register<int>(new(
+                Name: "Save Frames Start",
+                Default: "0",
+                Description: "The first frame in the range of frames to save and output. Each frame between this frame and Extract Frames End (inclusive) will be output and saved. Must be less than or equal to Extract Frames End.",
+                OrderPriority: 32,
+                Group: T2IParamTypes.GroupOtherFixes,
+                Max: 1000000
+            ));
+            SaveFramesEndParam = T2IParamTypes.Register<int>(new(
+                Name: "Save Frames End",
+                Default: "0",
+                Description: "The last frame in the range of frames to save and output. Each frame between this frame and Extract Frames Start (inclusive) will be output and saved. Must be greater than or equal to Extract Frames Start.",
+                OrderPriority: 33,
+                Group: T2IParamTypes.GroupOtherFixes,
+                Max: 1000000
+            ));
         }
         catch (Exception ex)
         {
@@ -41,7 +58,8 @@ public class FrameSaver : Extension
         // Add the workflow modification step
         WorkflowGenerator.AddStep(g => 
         {
-            // Only add nodes if the parameter is enabled
+            string lastVAEDecodeId = null;
+            // Add nodes to save the first and last frames if enabled
             if (g.UserInput.Get(SaveLastFrameParam, false) || g.UserInput.Get(SaveFirstFrameParam, false))
             {
                 //Get the last VAEDecode node
@@ -49,16 +67,15 @@ public class FrameSaver : Extension
                 var lastVAEDecodeNode = VAEDecodeNodes.LastOrDefault();
                 if (lastVAEDecodeNode == null)
                 {
-                    Logs.Error("SaveLastFrameExtension: No VAE Decode nodes found to extract frames from.");
+                    Logs.Error("FrameSaverExtension: No VAE Decode nodes found to extract frames from.");
                     return;
                 }
-                var lastVAEDecodeId = lastVAEDecodeNode?.Name;
+                lastVAEDecodeId = lastVAEDecodeNode?.Name;
 
                 if (g.UserInput.Get(SaveFirstFrameParam, false))
                 {
                     // Create GetImageFromBatch node to extract the first frame
-                    string getFirstImageNode = g.CreateNode("ImageFromBatch", new JObject()
-                    {
+                    string getFirstImageNode = g.CreateNode("ImageFromBatch", new JObject() {
                         ["batch_index"] = 0,
                         ["length"] = 1,
                         ["image"] = new JArray { lastVAEDecodeId, 0 }
@@ -67,9 +84,9 @@ public class FrameSaver : Extension
                     // Create SwarmSaveImageWS node to save the extracted frame
                     var saveFirstImageNode = g.CreateImageSaveNode([getFirstImageNode, 0], g.GetStableDynamicID(50000, 0));
                 }
-                
+
                 if (g.UserInput.Get(SaveLastFrameParam, false))
-                { 
+                {
                     // Create SwarmCountFrames node to get the number of frames
                     string frameCountNode = g.CreateNode("SwarmCountFrames", new JObject() {
                         ["image"] = g.FinalImageOut
@@ -84,7 +101,39 @@ public class FrameSaver : Extension
                     });
 
                     // Create SwarmSaveImageWS node to save the extracted frame
-                    var saveLastImageNode = g.CreateImageSaveNode([getLastImageNode, 0], g.GetStableDynamicID(50000, 0));
+                    var saveLastImageNode = g.CreateImageSaveNode([getLastImageNode, 0], g.GetStableDynamicID(50001, 0));
+                }
+            }
+
+            //Add nodes to extract a range of frames if specified
+            var frameExtractStart = g.UserInput.Get(SaveFramesStartParam, 0);
+            var frameExtractEnd = g.UserInput.Get(SaveFramesEndParam, 0);
+            if (frameExtractEnd > 0 && frameExtractStart <= frameExtractEnd)
+            {
+                // If VAE Decode nodes were not previously found, try to find them now
+                if (lastVAEDecodeId == null)
+                {
+                    //Get the last VAEDecode node
+                    var VAEDecodeNodes = g.NodesOfClass("VAEDecode");
+                    var lastVAEDecodeNode = VAEDecodeNodes.LastOrDefault();
+                    if (lastVAEDecodeNode == null)
+                    {
+                        Logs.Error("FrameSaverExtension: No VAE Decode nodes found to extract frames from.");
+                        return;
+                    }
+                    lastVAEDecodeId = lastVAEDecodeNode?.Name;
+                }
+
+                for (int i = frameExtractStart; i <= frameExtractEnd; i++)
+                {
+                    // Create GetImageFromBatch node to extract the specified frame
+                    string getImageNode = g.CreateNode("ImageFromBatch", new JObject() {
+                        ["batch_index"] = i,
+                        ["length"] = 1,
+                        ["image"] = new JArray { lastVAEDecodeId, 0 }
+                    });
+                    // Create SwarmSaveImageWS node to save the extracted frame
+                    var saveImageNode = g.CreateImageSaveNode([getImageNode, 0], g.GetStableDynamicID(50002 + i, 0));
                 }
             }
         }, 20);
