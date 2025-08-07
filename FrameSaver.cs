@@ -35,7 +35,7 @@ public class FrameSaver : Extension
             ));
             SaveFramesStartParam = T2IParamTypes.Register<int>(new(
                 Name: "Save Frames Start",
-                Default: "0",
+                Default: "-1",
                 Description: "The first frame in the range of frames to save and output. Each frame between this frame and Extract Frames End (inclusive) will be output and saved. Must be less than or equal to Extract Frames End.",
                 OrderPriority: 32,
                 Group: T2IParamTypes.GroupOtherFixes,
@@ -43,7 +43,7 @@ public class FrameSaver : Extension
             ));
             SaveFramesEndParam = T2IParamTypes.Register<int>(new(
                 Name: "Save Frames End",
-                Default: "0",
+                Default: "-1",
                 Description: "The last frame in the range of frames to save and output. Each frame between this frame and Extract Frames Start (inclusive) will be output and saved. Must be greater than or equal to Extract Frames Start.",
                 OrderPriority: 33,
                 Group: T2IParamTypes.GroupOtherFixes,
@@ -106,9 +106,9 @@ public class FrameSaver : Extension
             }
 
             //Add nodes to extract a range of frames if specified
-            var frameExtractStart = g.UserInput.Get(SaveFramesStartParam, 0);
-            var frameExtractEnd = g.UserInput.Get(SaveFramesEndParam, 0);
-            if (frameExtractEnd > 0 && frameExtractStart <= frameExtractEnd)
+            var frameExtractStart = g.UserInput.Get(SaveFramesStartParam, -1);
+            var frameExtractEnd = g.UserInput.Get(SaveFramesEndParam, -1);
+            if (frameExtractEnd >= 0 && frameExtractStart >= 0 && frameExtractStart <= frameExtractEnd)
             {
                 // If VAE Decode nodes were not previously found, try to find them now
                 if (lastVAEDecodeId == null)
@@ -124,17 +124,17 @@ public class FrameSaver : Extension
                     lastVAEDecodeId = lastVAEDecodeNode?.Name;
                 }
 
-                for (int i = frameExtractStart; i <= frameExtractEnd; i++)
-                {
-                    // Create GetImageFromBatch node to extract the specified frame
-                    string getImageNode = g.CreateNode("ImageFromBatch", new JObject() {
-                        ["batch_index"] = i,
-                        ["length"] = 1,
-                        ["image"] = new JArray { lastVAEDecodeId, 0 }
-                    });
-                    // Create SwarmSaveImageWS node to save the extracted frame
-                    var saveImageNode = g.CreateImageSaveNode([getImageNode, 0], g.GetStableDynamicID(50002 + i, 0));
-                }
+                // Create GetImageFromBatch node to extract the specified frames
+                string getImageNode = g.CreateNode("ImageFromBatch", new JObject() {
+                    ["batch_index"] = frameExtractStart,
+                    ["length"] = (frameExtractEnd-frameExtractStart)+1,
+                    ["image"] = new JArray { lastVAEDecodeId, 0 }
+                });
+
+                // Create SwarmSaveImageWS node to save the extracted frames
+                var saveImageNode = g.CreateNode("SwarmSaveImageWS", new JObject() {
+                    ["images"] = new JArray { getImageNode, 0 }
+                }, g.GetStableDynamicID(50002, 0));
             }
         }, 20);
     }
