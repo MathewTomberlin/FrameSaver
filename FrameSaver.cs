@@ -39,7 +39,8 @@ public class FrameSaver : Extension
                 Description: "The first frame in the range of frames to save and output. Each frame between this frame and Extract Frames End (inclusive) will be output and saved. Must be less than or equal to Extract Frames End.",
                 OrderPriority: 32,
                 Group: T2IParamTypes.GroupOtherFixes,
-                Max: 1000000
+                Max: 1000000,
+                Min: -1
             ));
             SaveFramesEndParam = T2IParamTypes.Register<int>(new(
                 Name: "Save Frames End",
@@ -47,7 +48,8 @@ public class FrameSaver : Extension
                 Description: "The last frame in the range of frames to save and output. Each frame between this frame and Extract Frames Start (inclusive) will be output and saved. Must be greater than or equal to Extract Frames Start.",
                 OrderPriority: 33,
                 Group: T2IParamTypes.GroupOtherFixes,
-                Max: 1000000
+                Max: 1000000,
+                Min: -1
             ));
         }
         catch (Exception ex)
