@@ -13,16 +13,20 @@ public class FrameSaver : Extension
     public static T2IRegisteredParam<bool> SaveLastFrameParam, SaveFirstFrameParam;
     public static T2IRegisteredParam<int> SaveFramesStartParam, SaveFramesEndParam;
 
+    public static T2IParamGroup FrameSaverParamGroup;
+
     // OnInit is called when the extension is loaded
     public override void OnInit()
     {
+        FrameSaverParamGroup = new("Frame Saver", Toggles: false, Open: false, IsAdvanced: true, Parent: T2IParamTypes.GroupAdvancedVideo);
+
         try{
             SaveFirstFrameParam = T2IParamTypes.Register<bool>(new(
                 Name: "Save First Frame",
                 Default: "false",
                 Description: "When enabled, the first frame of the video will be saved and output",
                 OrderPriority: 30,
-                Group: T2IParamTypes.GroupOtherFixes,
+                Group: FrameSaverParamGroup,
                 IgnoreIf: "false"
             ));
             SaveLastFrameParam = T2IParamTypes.Register<bool>(new(
@@ -30,7 +34,7 @@ public class FrameSaver : Extension
                 Default: "false",
                 Description: "When enabled, the last frame of the video will be saved and output",
                 OrderPriority: 31,
-                Group: T2IParamTypes.GroupOtherFixes,
+                Group: FrameSaverParamGroup,
                 IgnoreIf: "false"
             ));
             SaveFramesStartParam = T2IParamTypes.Register<int>(new(
@@ -38,7 +42,7 @@ public class FrameSaver : Extension
                 Default: "-1",
                 Description: "The first frame in the range of frames to save and output. Each frame between this frame and Extract Frames End (inclusive) will be output and saved. Must be less than or equal to Extract Frames End.",
                 OrderPriority: 32,
-                Group: T2IParamTypes.GroupOtherFixes,
+                Group: FrameSaverParamGroup,
                 Max: 1000000,
                 Min: -1
             ));
@@ -47,7 +51,7 @@ public class FrameSaver : Extension
                 Default: "-1",
                 Description: "The last frame in the range of frames to save and output. Each frame between this frame and Extract Frames Start (inclusive) will be output and saved. Must be greater than or equal to Extract Frames Start.",
                 OrderPriority: 33,
-                Group: T2IParamTypes.GroupOtherFixes,
+                Group: FrameSaverParamGroup,
                 Max: 1000000,
                 Min: -1
             ));
@@ -84,14 +88,15 @@ public class FrameSaver : Extension
                     });
 
                     // Create SwarmSaveImageWS node to save the extracted frame
-                    var saveFirstImageNode = g.CreateImageSaveNode([getFirstImageNode, 0], g.GetStableDynamicID(50000, 0));
+                    _ = new WGNodeData([getFirstImageNode, 0], g, WGNodeData.DT_IMAGE, g.CurrentCompat()).SaveOutput(null, null, id: g.GetStableDynamicID(50000, 0));
                 }
 
                 if (g.UserInput.Get(SaveLastFrameParam, false))
                 {
+                    JArray countFramesSource = g.CurrentMedia?.AsRawImage(g.CurrentVae)?.Path ?? WorkflowGenerator.NodePath(lastVAEDecodeId, 0);
                     // Create SwarmCountFrames node to get the number of frames
                     string frameCountNode = g.CreateNode("SwarmCountFrames", new JObject() {
-                        ["image"] = g.FinalImageOut
+                        ["image"] = countFramesSource
                     });
                     JArray frameCount = [frameCountNode, 0];
 
@@ -103,7 +108,7 @@ public class FrameSaver : Extension
                     });
 
                     // Create SwarmSaveImageWS node to save the extracted frame
-                    var saveLastImageNode = g.CreateImageSaveNode([getLastImageNode, 0], g.GetStableDynamicID(50001, 0));
+                    _ = new WGNodeData([getLastImageNode, 0], g, WGNodeData.DT_IMAGE, g.CurrentCompat()).SaveOutput(null, null, id: g.GetStableDynamicID(50001, 0));
                 }
             }
 
